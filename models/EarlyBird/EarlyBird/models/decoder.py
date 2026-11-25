@@ -98,7 +98,16 @@ class Decoder(nn.Module):
         # pad input
         m = 8
         ph, pw = math.ceil(h / m) * m - h, math.ceil(w / m) * m - w
-        x = torch.nn.functional.pad(x, (ph, pw))
+        if ph == 0:
+            # Wildtrack / MultiviewX (H chia hết cho 8): giữ nguyên cách pad gốc để kết quả không đổi.
+            # F.pad với 2 giá trị chỉ pad chiều W (trái=ph=0, phải=pw).
+            x = torch.nn.functional.pad(x, (ph, pw))
+        else:
+            # H không chia hết cho 8 (vd. WaveTrack 62x80): pad đúng cả H lẫn W, đối xứng,
+            # khớp với đoạn cắt pad ở cuối forward. Cách gốc pad nhầm W (82) và để H=62 nên lệch skip connection.
+            pt, pb = ph // 2, ph - (ph // 2)
+            pl, pr = pw // 2, pw - (pw // 2)
+            x = torch.nn.functional.pad(x, [pl, pr, pt, pb])
 
         # (H, W)
         skip_x = {'1': x}
