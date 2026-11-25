@@ -20,9 +20,11 @@ class WaveTrack(VisionDataset):
         # image of shape C,H,W (C,N_row,N_col); xy indexing; x,y (w,h) (n_col,n_row)
         self.__name__ = 'WaveTrack'
         self.img_shape, self.worldgrid_shape = [1080, 1920], [248, 320]  # H,W; N_row,N_col
-        # frame ids are 0, 30, ..., 26070. 26060 puts the 0.9 train split after id 23430, which gives an
-        # even number (782) of train frames.
-        self.num_cam, self.num_frame = 5, 26060
+        # frame ids are 0, 30, ..., 26070 (870 frames). Train/test split is 80/20 for WaveTrack (90/10 for the
+        # other datasets): 26071 puts the cut between id 20850 and 20880 -> 696 train frames (even, as
+        # EarlyBird's RandomPairSampler needs) and 174 test frames, using every frame.
+        self.num_cam, self.num_frame = 5, 26071
+        self.train_ratio = 0.8
         # world x,y correspond to w,h
         self.indexing = 'xy'
         self.world_indexing_from_xy_mat = np.eye(3)

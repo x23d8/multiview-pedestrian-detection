@@ -12,10 +12,12 @@ from multiview_detector.utils.projection import *
 
 class frameDataset(VisionDataset):
     def __init__(self, base, train=True, transform=ToTensor(), target_transform=ToTensor(),
-                 reID=False, grid_reduce=4, img_reduce=4, train_ratio=0.9, force_download=True,
+                 reID=False, grid_reduce=4, img_reduce=4, train_ratio=None, force_download=True,
                  drop_ratio=0, drop_mode='instance', pseudo_cache=None, pseudo_conf_threshold=0.5,
                  pseudo_sigma_m=0.1 * (20 / 4) ** 0.5, pseudo_suppress_radius_m=0.0):
         super().__init__(base.root, transform=transform, target_transform=target_transform)
+        if train_ratio is None:
+            train_ratio = getattr(base, 'train_ratio', 0.9)  # WaveTrack sets 0.8
 
         map_sigma, map_kernel_size = 20 / grid_reduce, 20
         img_sigma, img_kernel_size = 10 / img_reduce, 10

@@ -253,9 +253,12 @@ bash run_experiments.sh --dataset wavetrack --data-path $PWD/Data/WaveTrackNew -
 ```
 
 Chi tiết quy ước:
-- Frame id là 0, 30, ..., 26070 (870 frame). `num_frame = 26060` đặt mốc chia train/test (0.9) giữa id 23430 và 23460:
-  **782 frame train, 87 frame test**. Số frame train chẵn là điều kiện của `RandomPairSampler` (EarlyBird). Frame 26070
-  nằm ngoài `num_frame` nên không vào test.
+- Frame id là 0, 30, ..., 26070 (870 frame). **WaveTrack chia train/test 80/20** (Wildtrack/MultiviewX vẫn 90/10): tỉ lệ nằm
+  ở `train_ratio` của lớp dataset, và `num_frame = 26071` đặt mốc cắt giữa id 20850 và 20880, cho **696 frame train,
+  174 frame test**, dùng đủ cả 870 frame. Số frame train chẵn là điều kiện của `RandomPairSampler` (EarlyBird).
+- Nhãn drop phụ thuộc mốc chia train/test (MVDet/MVDeTr/SHOT nạp nhãn drop cả cho tập test), nên
+  `simulate_dropped_annotations.py` tự lấy đúng tỉ lệ theo dataset, và `run_experiments.sh` / notebook xoá rồi sinh lại các
+  thư mục `drop_*` đã sinh với mốc khác (đọc `train_cutoff_frame_id` trong `stats.json`).
 - Camera WaveTrack dùng quy ước OpenCV (độ sâu dương, Z hướng lên), khác MultiviewX (độ sâu âm). Vì vậy
   `d_wavetrack.yml` dùng `depth` dương và không đặt `z_sign: -1`. SHOT dùng `depth_margin = 0.1` m.
 - TrackTacular dùng `frame_step = 30` (khoảng cách giữa hai frame liên tiếp).

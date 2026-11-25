@@ -80,10 +80,11 @@ class PedestrianDataset(VisionDataset):
             bounds=self.bounds,
             assert_cube=False)
 
+        train_ratio = getattr(base, 'train_ratio', 0.9)  # WaveTrack sets 0.8
         if self.is_train:
-            frame_range = range(0, int(self.num_frame * 0.9))
+            frame_range = range(0, int(self.num_frame * train_ratio))
         else:
-            frame_range = range(int(self.num_frame * 0.9), self.num_frame)
+            frame_range = range(int(self.num_frame * train_ratio), self.num_frame)
 
         self.img_fpaths = self.base.get_image_fpaths(frame_range)
         self.world_gt = {}

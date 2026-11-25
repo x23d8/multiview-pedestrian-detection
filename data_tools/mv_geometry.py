@@ -169,7 +169,8 @@ class WaveTrack(_MultiviewBase):
     def __init__(self, root):
         self.__name__ = 'WaveTrack'
         self.img_shape, self.worldgrid_shape = [1080, 1920], [248, 320]  # H,W; N_row,N_col
-        self.num_cam, self.num_frame = 5, 26060
+        self.num_cam, self.num_frame = 5, 26071
+        self.train_ratio = 0.8
         self.indexing = 'xy'
         with open(os.path.join(root, 'calibrations', 'calibration.json'), encoding='utf-8') as stream:
             cameras = {item['name']: item for item in json.load(stream)['cameras']}

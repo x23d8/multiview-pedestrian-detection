@@ -51,10 +51,12 @@ def get_gt(Rshape, x_s, y_s, w_s=None, h_s=None, v_s=None, reduce=4, top_k=100, 
 class frameDataset(VisionDataset):
     def __init__(self, base, train=True, reID=False, world_reduce=4, img_reduce=12,
                  world_kernel_size=10, img_kernel_size=10,
-                 train_ratio=0.9, top_k=100, force_download=True,
+                 train_ratio=None, top_k=100, force_download=True,
                  semi_supervised=0.0, dropout=0.0, augmentation=False, drop_ratio=0, drop_mode='instance',
                  pseudo_cache=None, pseudo_conf_threshold=0.5, pseudo_sigma_m=0.25, pseudo_suppress_radius_m=0.0):
         super().__init__(base.root)
+        if train_ratio is None:
+            train_ratio = getattr(base, 'train_ratio', 0.9)  # WaveTrack sets 0.8
 
         self.base = base
         self.num_cam, self.num_frame = base.num_cam, base.num_frame

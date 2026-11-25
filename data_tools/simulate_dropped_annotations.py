@@ -31,11 +31,12 @@ DATASET_META = {
         "num_frame": 400,
         "num_cam": 6,
     },
-    # WaveTrack frame ids are 0, 30, ..., 26070 (870 frames). 26060 puts the 0.9 split at id 23454 and
-    # gives an even number (782) of train frames, which EarlyBird's RandomPairSampler needs.
+    # WaveTrack frame ids are 0, 30, ..., 26070 (870 frames). 80/20 split: 26071 puts the cut between id 20850
+    # and 20880 -> 696 train frames (even, as EarlyBird's RandomPairSampler needs) and 174 test frames.
     "WaveTrack": {
-        "num_frame": 26060,
+        "num_frame": 26071,
         "num_cam": 5,
+        "train_ratio": 0.8,
     },
 }
 DATASET_META["WaveTrackNew"] = DATASET_META["WaveTrack"]
@@ -302,7 +303,8 @@ if __name__ == "__main__":
         "-r", "--root", type=str, default="./Data_temp",
         help="Folder containing dataset (e.g. ./Data_temp)",
     )
-    parser.add_argument("--train-ratio", type=float, default=0.9)
+    parser.add_argument("--train-ratio", type=float, default=None,
+                        help="train fraction of frames (default: per dataset, 0.9; WaveTrack 0.8)")
     parser.add_argument(
         "-s", "--settings", nargs="+", default=["drop20", "drop45", "drop60"],
         choices=list(DROP_SETTINGS.keys()),
@@ -318,7 +320,8 @@ if __name__ == "__main__":
     run(
         dataset=args.dataset,
         root=args.root,
-        train_ratio=args.train_ratio,
+        train_ratio=(args.train_ratio if args.train_ratio is not None
+                     else DATASET_META[args.dataset].get("train_ratio", 0.9)),
         settings=args.settings,
         seed=args.seed,
     )

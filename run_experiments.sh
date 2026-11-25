@@ -7,7 +7,7 @@
 #   bash run_experiments.sh --dry-run                         # chỉ in lệnh
 #
 # Tên loss: orig = loss gốc (MVDet/SHOT: mse, MVDeTr/EarlyBird/TrackTacular: focal); aabl = `brl` trong code.
-# drop 0 = full supervised. Pseudo-label không áp dụng cho drop 0 (không có nhãn bị thiếu) nên bị bỏ qua.
+# drop 0 = full supervised. Pseudo-label vẫn chạy được ở drop 0 (dùng làm một điều kiện đối chứng).
 set -uo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
@@ -141,10 +141,33 @@ if [ $need_pseudo -eq 1 ] && [ ! -f "$CACHE" ]; then
 fi
 
 drop_dir_prefix=drop; [ "$DROP_MODE" = frame ] && drop_dir_prefix=frame_drop
+# mốc chia train/test mà code model dùng (số frame * tỉ lệ train; WaveTrack 80/20, còn lại 90/10)
+# python3 trên Windows có thể là stub của Microsoft Store (lỗi im lặng): chọn interpreter chạy được thật
+PYBIN=python3
+for candidate in python3 python; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys' >/dev/null 2>&1; then PYBIN=$candidate; break; fi
+done
+EXPECTED_CUTOFF=$("$PYBIN" - "$ROOT" "$DS_DIR" 2>/dev/null <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + '/data_tools')
+import simulate_dropped_annotations as sim
+meta = sim.DATASET_META[sys.argv[2]]
+print(int(meta['num_frame'] * meta.get('train_ratio', 0.9)))
+PY
+)
 missing_drops=()
 for d in "${DROPS[@]}"; do
     [ "$d" = 0 ] && continue
-    [ -d "$DATA_PATH/drop_annotations/${drop_dir_prefix}_$d" ] || missing_drops+=("drop$d")
+    drop_dir=$DATA_PATH/drop_annotations/${drop_dir_prefix}_$d
+    if [ ! -d "$drop_dir" ]; then
+        missing_drops+=("drop$d")
+    elif [ -n "$EXPECTED_CUTOFF" ] && [ -f "$drop_dir/stats.json" ] \
+            && ! grep -q '"train_cutoff_frame_id": '"$EXPECTED_CUTOFF"',' "$drop_dir/stats.json"; then
+        # sinh với tỉ lệ train/test khác: frame test sẽ bị thiếu nhãn (MVDet/MVDeTr/SHOT nạp nhãn drop cả cho test)
+        log "nhãn drop cũ không khớp mốc chia train/test ($EXPECTED_CUTOFF): ${drop_dir_prefix}_$d, sinh lại"
+        [ $GEN_DROPS -eq 1 ] && [ $DRY -eq 0 ] && rm -rf "$drop_dir"
+        missing_drops+=("drop$d")
+    fi
 done
 if [ ${#missing_drops[@]} -gt 0 ]; then
     if [ $GEN_DROPS -eq 1 ]; then
@@ -258,9 +281,6 @@ for m in "${MODELS[@]}"; do
   for d in "${DROPS[@]}"; do
     for l in "${LOSSES[@]}"; do
       for pl in "${pl_values[@]}"; do
-        if [ "$pl" = 1 ] && [ "$d" = 0 ]; then
-            log "bỏ qua $m drop0 pseudo (full supervised không có nhãn thiếu)"; continue
-        fi
         tag="${DATASET}_${m}_${DROP_MODE}$d"; [ "$d" = 0 ] && tag="${DATASET}_${m}_full"
         tag="${tag}_${l}_$([ "$pl" = 1 ] && echo pl || echo nopl)"
         if [ $SKIP_DONE -eq 1 ] && [ $DRY -eq 0 ] && [ -f "$OUT/done/$tag" ]; then
