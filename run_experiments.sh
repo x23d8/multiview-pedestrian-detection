@@ -120,7 +120,7 @@ if [ -z "$PSEUDO_WEIGHT" ] && [ "$DROP_MODE" = frame ]; then PSEUDO_WEIGHT=0.01;
 STAMP=$(date +%Y%m%d_%H%M%S)
 OUT=$ROOT/experiment_logs
 mkdir -p "$OUT/done" "$OUT/runs"
-SUMMARY=$OUT/summary_$STAMP.tsv
+SUMMARY=$OUT/summary_${STAMP}_$$.tsv
 echo -e "tag\tstatus\tseconds" > "$SUMMARY"
 
 log() { echo "[exp] $*"; }
@@ -160,12 +160,14 @@ fi
 build_cmd() { # model drop loss pseudo(0/1) -> CMD
     local m=$1 d=$2 l=$3 pl=$4 loss
     CMD=()
+    CUR_LOSS=
     case $m in
         mvdet|shot|mvdetr)
             if [ "$l" = aabl ]; then loss=brl
             elif [ "$m" = mvdet ]; then loss=mse
             elif [ "$m" = shot ]; then loss=$SHOT_ORIG_LOSS
             else loss=focal; fi
+            CUR_LOSS=$loss
             CMD=(-d "$DATASET" --data_path "$DATA_PATH" --drop_ratio "$d" --loss "$loss")
             [ "$d" != 0 ] && [ "$DROP_MODE" = frame ] && CMD+=(--drop_mode frame)
             if [ "$pl" = 1 ]; then
@@ -186,6 +188,8 @@ build_cmd() { # model drop loss pseudo(0/1) -> CMD
                 [ -n "$PSEUDO_WEIGHT" ] && CMD+=(--model.pseudo_no_peak_loss false --model.pseudo_loss_weight "$PSEUDO_WEIGHT")
             fi
             [ -n "$EPOCHS" ] && CMD+=(--trainer.max_epochs "$EPOCHS")
+            # riêng cho từng run để các run song song không giành số version lightning_logs/version_N
+            CMD+=(--trainer.default_root_dir "$RUN_DIR")
             ;;
     esac
     CMD+=("${EXTRA[@]}")
@@ -211,7 +215,7 @@ model_rel() {
 # gom artifact của 1 run vào $COLLECT/<tag>: lệnh, console, log.txt/test.txt/weight (MVDet, MVDeTr, SHOT)
 # hoặc các lightning_logs/version_N mới (EarlyBird, TrackTacular: gồm cả version do bước test tạo ra)
 collect_run() {
-    local m=$1 tag=$2 marker=$3 wd=$4 before=$5 dest="$COLLECT/$tag" f src v p
+    local m=$1 tag=$2 marker=$3 wd=$4 before=$5 d=$6 loss=$7 pl=$8 dest="$COLLECT/$tag" f src v p want_pl=False
     mkdir -p "$dest"
     cp -f "$OUT/runs/$STAMP.$tag.log" "$dest/console.log" 2>/dev/null
     { printf '%q ' bash run.sh "$m" "${CMD[@]}"; echo; } > "$dest/command.txt"
@@ -222,7 +226,11 @@ collect_run() {
             [[ $v =~ ^[0-9]+$ ]] && [ "$v" -gt "$before" ] && cp -r "$p" "$dest/lightning_logs_version_$v"
         done
     else
+        [ "$pl" = 1 ] && want_pl=True
         while IFS= read -r f; do
+            # log.txt của các run song song: nhận đúng run này qua dict Settings in ở đầu file
+            grep -qF "'drop_ratio': $d," "$f" && grep -qF "'loss': '$loss'" "$f" \
+                && grep -qF "'use_pseudo_labels': $want_pl" "$f" || continue
             src=$(dirname "$f")
             cp -r "$src" "$dest/$(basename "$src")"
             rm -rf "$dest/$(basename "$src")/scripts"   # bản copy mã nguồn do main.py tạo
@@ -258,6 +266,7 @@ for m in "${MODELS[@]}"; do
         if [ $SKIP_DONE -eq 1 ] && [ $DRY -eq 0 ] && [ -f "$OUT/done/$tag" ]; then
             log "đã xong, bỏ qua: $tag"; continue
         fi
+        RUN_DIR=$OUT/lightning/$tag
         build_cmd "$m" "$d" "$l" "$pl"
         total=$((total+1))
         log "=== $tag ==="
@@ -269,7 +278,7 @@ for m in "${MODELS[@]}"; do
         fi
         wd=""; before=-1
         marker=$OUT/.marker_$tag; touch "$marker"
-        if [[ $m == earlybird || $m == tracktacular ]]; then wd=$(model_workdir "$m"); before=$(latest_version "$wd"); fi
+        if [[ $m == earlybird || $m == tracktacular ]]; then wd=$RUN_DIR; before=$(latest_version "$wd"); fi
         bash "$ROOT/run.sh" "$m" "${CMD[@]}" 2>&1 | tee "$OUT/runs/$STAMP.$tag.log"
         rc=${PIPESTATUS[0]}
         if [ "$rc" -ne 0 ]; then
@@ -279,15 +288,16 @@ for m in "${MODELS[@]}"; do
             if [ "$after" -le "$before" ]; then
                 status=no_version
             else
-                ver=lightning_logs/version_$after
+                ver=$wd/lightning_logs/version_$after
                 log "test $m: $ver (last.ckpt)"
                 bash "$ROOT/run.sh" "$m" test -c "$ver/config.yaml" --ckpt_path "$ver/checkpoints/last.ckpt" \
+                    --trainer.default_root_dir "$wd" \
                     2>&1 | tee -a "$OUT/runs/$STAMP.$tag.log"
                 [ "${PIPESTATUS[0]}" -ne 0 ] && status=test_fail
-                echo "$tag -> $wd/$ver" >> "$OUT/versions.txt"
+                echo "$tag -> $ver" >> "$OUT/versions.txt"
             fi
         fi
-        [ -n "$COLLECT" ] && collect_run "$m" "$tag" "$marker" "$wd" "$before"
+        [ -n "$COLLECT" ] && collect_run "$m" "$tag" "$marker" "$wd" "$before" "$d" "${CUR_LOSS:-}" "$pl"
         [ "$status" = ok ] && touch "$OUT/done/$tag" || failed=$((failed+1))
         echo -e "$tag\t$status\t$(( $(date +%s) - t0 ))" >> "$SUMMARY"
         log "$tag: $status"
