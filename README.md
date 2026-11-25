@@ -230,3 +230,41 @@ Thay `wildtrack` → `multiviewx` ở mọi chỗ:
 - Bước 2: `-d MultiviewX`, `--dataset multiviewx`, `--data_root ./Data/MultiviewX`, cache `multiviewx_yolo26s.json`.
 - Bước 3: `WT=$PWD/Data/MultiviewX`, `CACHE=$PWD/Data/pseudo_cache/multiviewx_yolo26s.json`.
 - MVDet/MVDeTr/SHOT: `-d multiviewx`. EarlyBird/TrackTacular: `-c configs/d_multiviewx.yml`.
+
+## 7. Dùng WaveTrackNew (5 camera, tự gán nhãn)
+
+WaveTrackNew có `Cam1..Cam5`, calibration trong `calibrations/calibration.json` (K, R, `tvec_m` theo mét, ảnh đã khử méo)
+và lưới BEV 7.82 × 6.02 m ô 2.5 cm (313 × 241 ô, đệm thành 320 × 248 để chia hết cho 8, điều kiện của world encoder `deform_trans` trong MVDeTr). Cả 5 mô hình nhận
+`wavetrack` như một dataset: `-d wavetrack` (MVDet/MVDeTr/SHOT), `-c configs/d_wavetrack.yml` (EarlyBird/TrackTacular).
+
+**a. Chuẩn hoá dataset** (chạy 1 lần; không sửa dataset gốc). Nhiều nhãn chỉ có `position_m` mà `positionID = null`, và
+`annotations_positions/` có file `*.review-backup`, `review_log.jsonl`; tool này điền `positionID = col + row * 313`
+(`col, row = round(position_m / 0.025)`), bỏ các file lạ, symlink ảnh:
+
+```bash
+python data_tools/prepare_wavetrack.py --src F:	hesis_dataset\WaveTrackNew --dst ./Data/WaveTrackNew
+```
+
+Tên thư mục đích phải chứa `wavetrack` (EarlyBird/TrackTacular dựa vào tên này). Sau đó dùng các bước 2a/2a'/2b với
+`-d WaveTrackNew`, `--dataset wavetrack`, cache `wavetrack_yolo26s.json`, hoặc chạy thẳng:
+
+```bash
+bash run_experiments.sh --dataset wavetrack --data-path $PWD/Data/WaveTrackNew --pseudo both
+```
+
+Chi tiết quy ước:
+- Frame id là 0, 30, ..., 26070 (870 frame). `num_frame = 26060` đặt mốc chia train/test (0.9) giữa id 23430 và 23460:
+  **782 frame train, 87 frame test**. Số frame train chẵn là điều kiện của `RandomPairSampler` (EarlyBird). Frame 26070
+  nằm ngoài `num_frame` nên không vào test.
+- Camera WaveTrack dùng quy ước OpenCV (độ sâu dương, Z hướng lên), khác MultiviewX (độ sâu âm). Vì vậy
+  `d_wavetrack.yml` dùng `depth` dương và không đặt `z_sign: -1`. SHOT dùng `depth_margin = 0.1` m.
+- TrackTacular dùng `frame_step = 30` (khoảng cách giữa hai frame liên tiếp).
+- Kiểm tra hình học: chiếu `position_m` về ảnh rơi cách đáy bbox khoảng 10-28 px (trung vị theo camera), không có điểm nào
+  nằm sau camera.
+
+## 8. Notebook Kaggle
+
+`kaggle_train.ipynb`: ô đầu chọn dataset + đường dẫn, model, mức drop (0 = full), cấu hình (loss orig/aabl,
+pseudo on/off), epoch, seed, lưu weight. Các ô sau tự lấy mã, cài venv, chuẩn bị dataset, sinh nhãn drop và pseudo cache,
+chạy `run_experiments.sh --collect`, rồi gom log.txt / test / weight / config và bảng `summary.csv` vào
+`/kaggle/working/output`. Cần Internet + GPU; mã phải có thay đổi WaveTrack (push nhánh hoặc attach làm dataset).

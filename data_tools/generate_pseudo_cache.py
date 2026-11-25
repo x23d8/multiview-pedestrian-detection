@@ -15,7 +15,7 @@ from mv_geometry import DATASETS
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--dataset', choices=['wildtrack', 'multiviewx'], required=True)
+    parser.add_argument('--dataset', choices=['wildtrack', 'multiviewx', 'wavetrack'], required=True)
     parser.add_argument('--data_root', required=True, help='Dataset root containing images and calibrations')
     parser.add_argument('--output', required=True, help='Output JSON detection cache')
     parser.add_argument('--weights', default='yolo26s.pt', help='Ultralytics detection weights')

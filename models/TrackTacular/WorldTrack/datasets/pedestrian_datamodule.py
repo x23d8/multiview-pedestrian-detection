@@ -5,6 +5,7 @@ import lightning as pl
 from torch.utils.data import DataLoader
 
 from datasets.multiviewx_dataset import MultiviewX
+from datasets.wavetrack_dataset import WaveTrack
 from datasets.wildtrack_dataset import Wildtrack
 from datasets.pedestrian_dataset import PedestrianDataset
 from datasets.sampler import TemporalSampler
@@ -52,7 +53,9 @@ class PedestrianDataModule(pl.LightningDataModule):
         self.data_train = None
 
     def setup(self, stage: Optional[str] = None):
-        if 'wildtrack' in self.dataset.lower():
+        if 'wavetrack' in self.dataset.lower():
+            base = WaveTrack(self.data_dir)
+        elif 'wildtrack' in self.dataset.lower():
             base = Wildtrack(self.data_dir)
         elif 'multiviewx' in self.dataset.lower():
             base = MultiviewX(self.data_dir)

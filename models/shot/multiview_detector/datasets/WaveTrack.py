@@ -1,0 +1,85 @@
+import json
+import os
+
+import numpy as np
+from torchvision.datasets import VisionDataset
+
+
+class WaveTrack(VisionDataset):
+    """WaveTrack: 5 cameras (Cam1..Cam5), xy-indexing, metres, 2.5 cm cells (MultiviewX convention).
+
+    The BEV grid is the 7.82 x 6.02 m ROI (313 x 241 cells) padded to a multiple of 8 (320 x 248; MVDeTr's deformable world encoder needs it).
+    ``positionID`` encodes ``x + y * 313`` (the unpadded width). Prepare the folder with
+    data_tools/prepare_wavetrack.py: it fills the missing positionIDs and removes non-annotation files.
+    Calibration is read from calibrations/calibration.json (K, R, tvec in metres, undistorted images).
+    """
+    POS_WIDTH = 313
+
+    def __init__(self, root):
+        super().__init__(root)
+        self.__name__ = 'WaveTrack'
+        self.img_shape, self.worldgrid_shape = [1080, 1920], [248, 320]  # H,W; N_row,N_col
+        # frame ids are 0, 30, ..., 26070. 26060 puts the 0.9 train split after id 23430, which gives an
+        # even number (782) of train frames, as EarlyBird's RandomPairSampler needs.
+        self.num_cam, self.num_frame = 5, 26060
+        # x,y correspond to w,h
+        self.indexing = 'xy'
+        self.worldgrid2worldcoord_mat = np.array([[0, 0.025, 0], [0.025, 0, 0], [0, 0, 1]])
+        # DPerspTransDetector shifts planes along the camera z axis; Wildtrack (positive depth) uses 10 cm
+        self.depth_margin = 0.1
+        with open(os.path.join(root, 'calibrations', 'calibration.json'), encoding='utf-8') as stream:
+            cameras = {item['name']: item for item in json.load(stream)['cameras']}
+        self._cameras = [cameras[f'Cam{index}'] for index in range(1, self.num_cam + 1)]
+        self.intrinsic_matrices, self.extrinsic_matrices = zip(
+            *[self.get_intrinsic_extrinsic_matrix(cam) for cam in range(self.num_cam)])
+
+    def get_image_fpaths(self, frame_range):
+        img_fpaths = {cam: {} for cam in range(self.num_cam)}
+        for camera_folder in sorted(os.listdir(os.path.join(self.root, 'Image_subsets'))):
+            if not camera_folder.startswith('C'):
+                continue
+            cam = int(camera_folder[-1]) - 1
+            if cam >= self.num_cam:
+                continue
+            for fname in sorted(os.listdir(os.path.join(self.root, 'Image_subsets', camera_folder))):
+                frame = int(fname.split('.')[0])
+                if frame in frame_range:
+                    img_fpaths[cam][frame] = os.path.join(self.root, 'Image_subsets', camera_folder, fname)
+        return img_fpaths
+
+    def get_worldgrid_from_pos(self, pos):
+        grid_x = pos % self.POS_WIDTH
+        grid_y = pos // self.POS_WIDTH
+        return np.array([grid_x, grid_y], dtype=int)
+
+    def get_pos_from_worldgrid(self, worldgrid):
+        grid_x, grid_y = worldgrid
+        return grid_x + grid_y * self.POS_WIDTH
+
+    def get_worldgrid_from_worldcoord(self, world_coord):
+        # metres -> 2.5 cm cells
+        coord_x, coord_y = world_coord
+        grid_x = coord_x * 40
+        grid_y = coord_y * 40
+        return np.array([grid_x, grid_y], dtype=int)
+
+    def get_worldcoord_from_worldgrid(self, worldgrid):
+        grid_x, grid_y = worldgrid
+        coord_x = grid_x / 40
+        coord_y = grid_y / 40
+        return np.array([coord_x, coord_y])
+
+    def get_worldcoord_from_pos(self, pos):
+        grid = self.get_worldgrid_from_pos(pos)
+        return self.get_worldcoord_from_worldgrid(grid)
+
+    def get_pos_from_worldcoord(self, world_coord):
+        grid = self.get_worldgrid_from_worldcoord(world_coord)
+        return self.get_pos_from_worldgrid(grid)
+
+    def get_intrinsic_extrinsic_matrix(self, camera_i):
+        item = self._cameras[camera_i]
+        intrinsic_matrix = np.asarray(item['camera_matrix'], dtype=np.float64)
+        extrinsic_matrix = np.hstack([np.asarray(item['R'], dtype=np.float64),
+                                      np.asarray(item['tvec_m'], dtype=np.float64).reshape(3, 1)])
+        return intrinsic_matrix, extrinsic_matrix

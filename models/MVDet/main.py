@@ -70,14 +70,17 @@ def main(args):
     normalize = T.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     denormalize = img_color_denormalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     train_trans = T.Compose([T.Resize([720, 1280]), T.ToTensor(), normalize, ])
-    if 'wildtrack' in args.dataset:
+    if 'wavetrack' in args.dataset:
+        data_path = os.path.expanduser(args.data_path or '~/Data/WaveTrackNew')
+        base = WaveTrack(data_path)
+    elif 'wildtrack' in args.dataset:
         data_path = os.path.expanduser(args.data_path or '~/Data/Wildtrack')
         base = Wildtrack(data_path)
     elif 'multiviewx' in args.dataset:
         data_path = os.path.expanduser(args.data_path or '~/Data/MultiviewX')
         base = MultiviewX(data_path)
     else:
-        raise Exception('must choose from [wildtrack, multiviewx]')
+        raise Exception('must choose from [wildtrack, multiviewx, wavetrack]')
     
     if args.use_pseudo_labels and not args.pseudo_cache:
         raise ValueError('--use_pseudo_labels requires --pseudo_cache')
@@ -194,7 +197,7 @@ if __name__ == '__main__':
     parser.add_argument('--variant', type=str, default='default',
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
-    parser.add_argument('-d', '--dataset', type=str, default='wildtrack', choices=['wildtrack', 'multiviewx'])
+    parser.add_argument('-d', '--dataset', type=str, default='wildtrack', choices=['wildtrack', 'multiviewx', 'wavetrack'])
     parser.add_argument('--data_path', type=str, default=None, help='Dataset root')
     parser.add_argument('-j', '--num_workers', type=int, default=4)
     parser.add_argument('-b', '--batch_size', type=int, default=1, metavar='N',

@@ -1,0 +1,13 @@
+data:
+  class_path: datasets.PedestrianDataModule
+  init_args:
+    data_dir: "../../Data/WaveTrackNew"  # folder name must contain "wavetrack"; run data_tools/prepare_wavetrack.py first
+    drop_ratio: 0  # 0 = full labels; 20/45/60 = drop_annotations/drop_XX (train split only)
+    drop_mode: instance  # instance = drop_XX; frame = frame_drop_XX (whole train frames dropped)
+model:
+  resolution: [62, 2, 80]  # Y,Z,X  (248/4, z bins, 320/4)
+  bounds: [0, 320, 0, 248, 0, 2]  # xmin,xmax,ymin,ymax,zmin,zmax (x,y in 2.5 cm cells, z in metres)
+  depth: [32, 0.5, 14]  # D, DMIN, DMAX in metres; WaveTrack cameras have positive depth (z_sign 1, as Wildtrack)
+  num_cameras: 5
+trainer:
+  max_epochs: 30

@@ -31,7 +31,14 @@ DATASET_META = {
         "num_frame": 400,
         "num_cam": 6,
     },
+    # WaveTrack frame ids are 0, 30, ..., 26070 (870 frames). 26060 puts the 0.9 split at id 23454 and
+    # gives an even number (782) of train frames, which EarlyBird's RandomPairSampler needs.
+    "WaveTrack": {
+        "num_frame": 26060,
+        "num_cam": 5,
+    },
 }
+DATASET_META["WaveTrackNew"] = DATASET_META["WaveTrack"]
 
 # CLI name -> (folder name under drop_annotations/, drop ratio)
 DROP_SETTINGS = {
@@ -289,7 +296,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-d", "--dataset", type=str, default="Wildtrack",
-        choices=["Wildtrack", "MultiviewX"],
+        choices=list(DATASET_META.keys()),
     )
     parser.add_argument(
         "-r", "--root", type=str, default="./Data_temp",

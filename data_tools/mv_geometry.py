@@ -4,6 +4,7 @@ Copied verbatim from MVDet's multiview_detector (datasets/Wildtrack.py, datasets
 utils/projection.py), keeping only what generate/evaluate_pseudo_cache.py use, so the tools run
 without importing any of the five frameworks. The cache they produce is read by all of them.
 """
+import json
 import os
 import xml.etree.ElementTree as ET
 
@@ -156,4 +157,42 @@ class MultiviewX(_MultiviewBase):
         return intrinsic_matrix, extrinsic_matrix
 
 
-DATASETS = {'wildtrack': Wildtrack, 'multiviewx': MultiviewX}
+class WaveTrack(_MultiviewBase):
+    """WaveTrack: 5 cameras (Cam1..Cam5), xy-indexing, metres, 2.5 cm cells (same convention as MultiviewX).
+
+    The BEV grid is the 7.82 x 6.02 m ROI (313 x 241 cells) padded to a multiple of 8 (320 x 248; MVDeTr's deformable world encoder needs it) so the
+    models can stride over it. Annotation ``positionID`` still encodes ``x + y * 313`` (the unpadded width).
+    Calibration comes from ``calibrations/calibration.json`` (K, R, tvec in metres); images are undistorted.
+    """
+    POS_WIDTH = 313
+
+    def __init__(self, root):
+        self.__name__ = 'WaveTrack'
+        self.img_shape, self.worldgrid_shape = [1080, 1920], [248, 320]  # H,W; N_row,N_col
+        self.num_cam, self.num_frame = 5, 26060
+        self.indexing = 'xy'
+        with open(os.path.join(root, 'calibrations', 'calibration.json'), encoding='utf-8') as stream:
+            cameras = {item['name']: item for item in json.load(stream)['cameras']}
+        self._cameras = [cameras[f'Cam{index}'] for index in range(1, self.num_cam + 1)]
+        super().__init__(root)
+
+    def get_worldgrid_from_pos(self, pos):
+        return np.array([pos % self.POS_WIDTH, pos // self.POS_WIDTH], dtype=int)
+
+    def get_worldgrid_from_worldcoord(self, world_coord):
+        coord_x, coord_y = world_coord
+        return np.array([coord_x * 40, coord_y * 40], dtype=int)
+
+    def get_worldcoord_from_worldgrid(self, worldgrid):
+        grid_x, grid_y = worldgrid
+        return np.array([grid_x / 40, grid_y / 40])
+
+    def get_intrinsic_extrinsic_matrix(self, camera_i):
+        item = self._cameras[camera_i]
+        intrinsic_matrix = np.asarray(item['camera_matrix'], dtype=np.float64)
+        extrinsic_matrix = np.hstack([np.asarray(item['R'], dtype=np.float64),
+                                      np.asarray(item['tvec_m'], dtype=np.float64).reshape(3, 1)])
+        return intrinsic_matrix, extrinsic_matrix
+
+
+DATASETS = {'wildtrack': Wildtrack, 'multiviewx': MultiviewX, 'wavetrack': WaveTrack}

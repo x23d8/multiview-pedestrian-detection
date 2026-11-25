@@ -2,3 +2,6 @@
 __pycache__/
 models/MVDeTr/multiview_detector/models/ops/build/
 models/MVDeTr/multiview_detector/models/ops/*.egg-info/
+
+# run_experiments.sh output
+experiment_logs/
